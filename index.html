@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --ink: #1f2328; --sub: #6b7280; --line: #e4e2dc;
+    --bg: #f6f5f1; --panel: #ffffff; --press: #eeede9;
+    --blue-bg: #e6f1fb; --blue: #185fa5;
+    --green-bg: #eaf3de; --green: #3b6d11;
+    --red-bg: #fcebeb; --red: #a32d2d;
+    --amber-bg: #faeeda; --amber: #854f0b;
+    --pur-bg: #eeedfe; --pur: #534ab7;
+  }
+  body[data-theme="dark"] {
+    --ink: #e8eaed; --sub: #9aa0a6; --line: #3a3d42;
+    --bg: #131417; --panel: #1d1f23; --press: #2a2d33;
+    --blue-bg: #12304d; --blue: #8ab8ec;
+    --green-bg: #1e3312; --green: #a5cf7a;
+    --red-bg: #43191b; --red: #f09595;
+    --amber-bg: #3d2c0d; --amber: #fac775;
+    --pur-bg: #2a2350; --pur: #cecbf6;
+  }
+  * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif;
+    background: var(--bg); color: var(--ink);
+    display: flex; flex-direction: column; overflow: hidden;
+    transition: background .3s;
+  }
+
+  header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { font-size: 22px; font-weight: 600; }
+  .head-right { display: flex; align-items: center; gap: 10px; }
+  #updated { font-size: 16px; color: var(--sub); }
+  .head-btn {
+    width: 48px; height: 48px; border: 1px solid var(--line); border-radius: 50%;
+    background: var(--panel); font-size: 22px; color: var(--sub); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .head-btn:active { background: var(--press); }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  #btn-refresh.spinning { animation: spin 1s linear infinite; color: var(--blue); }
+
+  #err-bar {
+    display: none; padding: 10px 20px; font-size: 16px;
+    background: var(--amber-bg); color: var(--amber);
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* ---- 3パネルレイアウト ---- */
+  #wrap { flex: 1; display: flex; min-height: 0; min-width: 0; background: var(--bg); }
+
+  .side-panel {
+    background: var(--panel); display: flex; flex-direction: column;
+    overflow: hidden; flex: none;
+  }
+  #panel-clock { align-items: center; justify-content: center; gap: 14px; }
+  #wrap.landscape #panel-clock { flex-direction: column; }
+  #wrap.portrait  #panel-clock { flex-direction: row; gap: 32px; }
+  #digi-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+
+  .splitter {
+    flex: none; background: var(--line); z-index: 5; touch-action: none;
+  }
+  #wrap.landscape .splitter { width: 14px; cursor: col-resize; }
+  #wrap.portrait  .splitter { height: 14px; cursor: row-resize; }
+
+  #panel-tasks {
+    flex: 1; display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 1px; background: var(--line); min-height: 0; min-width: 0;
+  }
+  .col { background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  .col-head, .cal-head {
+    margin: 14px 16px 8px; padding: 8px 14px; border-radius: 8px;
+    font-size: 20px; font-weight: 600; flex: none;
+  }
+  .col-today .col-head { background: var(--blue-bg); color: var(--blue); }
+  .col-week  .col-head { background: var(--green-bg); color: var(--green); }
+  .col-over  .col-head { background: var(--red-bg); color: var(--red); }
+  .cal-head { background: var(--pur-bg); color: var(--pur); }
+  .list, .cal-list { flex: 1; overflow-y: auto; padding: 0 8px 16px; }
+
+  .row {
+    display: flex; align-items: center; gap: 6px;
+    min-height: 64px; padding: 6px 4px; border-bottom: 1px solid var(--line);
+  }
+  .chk, .kebab {
+    width: 48px; height: 48px; flex: none; border: none; background: none;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; color: var(--sub); cursor: pointer; border-radius: 50%;
+  }
+  .chk:active, .kebab:active { background: var(--press); }
+  .row-main { flex: 1; min-width: 0; }
+  .row-title {
+    font-size: 20px; font-weight: 500; line-height: 1.35; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .row-due { font-size: 15px; color: var(--sub); margin-top: 2px; }
+  .row-due.over { color: var(--red); font-weight: 600; }
+  .row.done .row-title { color: var(--sub); text-decoration: line-through; }
+  .empty { text-align: center; color: var(--sub); font-size: 16px; padding: 32px 0; }
+
+  .ev { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .ev-time { font-size: 14px; color: var(--pur); font-weight: 600; }
+  .ev-title { font-size: 18px; font-weight: 500; margin-top: 2px; }
+  .ev-loc { font-size: 13px; color: var(--sub); margin-top: 2px; }
+
+  /* ---- 時計 ---- */
+  #analog { display: block; }
+  #analog .face { fill: var(--panel); stroke: var(--line); stroke-width: 2; }
+  #analog .h-h { stroke: var(--ink); stroke-width: 6; stroke-linecap: round; }
+  #analog .h-m { stroke: var(--ink); stroke-width: 4; stroke-linecap: round; }
+  #analog .h-s { stroke: var(--red); stroke-width: 1.5; stroke-linecap: round; }
+  #analog .pin { fill: var(--ink); }
+  #m-ticks line { stroke: var(--sub); stroke-width: 2; }
+  #m-ticks line.maj { stroke: var(--ink); stroke-width: 3.5; }
+  #m-dots circle { fill: var(--sub); }
+  #m-nums text {
+    fill: var(--ink); font-size: 26px; font-weight: 600;
+    text-anchor: middle; dominant-baseline: central;
+    font-family: "Hiragino Sans", sans-serif;
+  }
+  /* スタイル1: クラシック（目盛り） */
+  #panel-clock[data-astyle="1"] #m-dots, #panel-clock[data-astyle="1"] #m-nums { display: none; }
+  /* スタイル2: ミニマル（4点・細針・秒針グレー） */
+  #panel-clock[data-astyle="2"] #m-ticks, #panel-clock[data-astyle="2"] #m-nums { display: none; }
+  #panel-clock[data-astyle="2"] #analog .h-h { stroke-width: 4; }
+  #panel-clock[data-astyle="2"] #analog .h-m { stroke-width: 2.5; }
+  #panel-clock[data-astyle="2"] #analog .h-s { stroke: var(--sub); }
+  #panel-clock[data-astyle="2"] #analog .face { stroke-width: 1; }
+  /* スタイル3: ナンバー（12/3/6/9 数字入り） */
+  #panel-clock[data-astyle="3"] #m-dots { display: none; }
+  #panel-clock[data-astyle="3"] #m-ticks line.maj { display: none; }
+
+  #digital {
+    display: none; white-space: nowrap; font-weight: 600; letter-spacing: 1px;
+    font-family: "Consolas", "Menlo", monospace; color: var(--ink);
+  }
+  #digital-date { font-size: 15px; color: var(--sub); display: none; }
+  /* デジタル2: ライト=LCD液晶風 / ダーク=LED発光風 */
+  #panel-clock[data-dstyle="2"] #digital {
+    background: #e2e8cf; color: #37421f; padding: 8px 20px;
+    border-radius: 10px; border: 1px solid #c8cfb3;
+  }
+  #panel-clock[data-dstyle="2"] #digital-date { color: #5c6a45; }
+  body[data-theme="dark"] #panel-clock[data-dstyle="2"] #digital {
+    background: #0c110c; color: #39e75f; border: none;
+    text-shadow: 0 0 10px rgba(57, 231, 95, .55);
+  }
+  body[data-theme="dark"] #panel-clock[data-dstyle="2"] #digital-date {
+    color: #39e75f; opacity: .75;
+  }
+  /* デジタル3: モダン（極細） */
+  #panel-clock[data-dstyle="3"] #digital {
+    font-family: "Hiragino Sans", "Noto Sans JP", sans-serif;
+    font-weight: 200; letter-spacing: 4px;
+  }
+
+  /* ---- ボトムシート ---- */
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; z-index: 10; }
+  #overlay.show { display: block; }
+  #sheet {
+    position: fixed; left: 0; right: 0; bottom: -100%;
+    background: var(--panel); border-radius: 16px 16px 0 0; z-index: 11;
+    max-height: 84vh; display: flex; flex-direction: column;
+    transition: bottom .22s ease; box-shadow: 0 -4px 24px rgba(0,0,0,.25);
+  }
+  #sheet.show { bottom: 0; }
+  .sheet-head { padding: 16px 24px 10px; border-bottom: 1px solid var(--line); }
+  .sheet-head .t { font-size: 20px; font-weight: 600; }
+  .sheet-head .s { font-size: 14px; color: var(--sub); margin-top: 2px; }
+  .sheet-body { overflow-y: auto; padding: 8px 0 max(16px, env(safe-area-inset-bottom)); }
+
+  .menu-item {
+    display: flex; align-items: center; gap: 14px; width: 100%;
+    padding: 0 24px; min-height: 60px; border: none; background: none;
+    font-size: 19px; color: var(--ink); cursor: pointer; text-align: left;
+  }
+  .menu-item:active { background: var(--press); }
+  .menu-item .ic { font-size: 24px; width: 30px; text-align: center; color: var(--sub); }
+  .menu-item.danger, .menu-item.danger .ic { color: var(--red); }
+
+  .panel { padding: 16px 24px; }
+  .panel label { display: block; font-size: 15px; color: var(--sub); margin: 14px 0 6px; }
+  .panel input[type=date], .panel input[type=text] {
+    width: 100%; font-size: 19px; padding: 12px;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel); color: var(--ink);
+  }
+  .btn-row { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+  .btn-row.footer { margin-top: 20px; }
+  .btn {
+    flex: 1; min-height: 52px; font-size: 17px; font-weight: 600;
+    border-radius: 10px; border: 1px solid var(--line); background: var(--panel);
+    color: var(--ink); cursor: pointer; min-width: 90px;
+  }
+  .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .btn.danger { background: var(--red); border-color: var(--red); color: #fff; }
+  .btn.sel { background: var(--blue-bg); border-color: var(--blue); color: var(--blue); }
+  .btn.mini { flex: none; min-width: 52px; min-height: 46px; font-size: 18px; }
+  .btn:active { opacity: .85; }
+  .notes-view { font-size: 17px; line-height: 1.7; white-space: pre-wrap; }
+  .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 8px 0; }
+  .qr-inner { background: #fff; padding: 12px; border-radius: 10px; }
+  .qr-hint { font-size: 15px; color: var(--sub); text-align: center; line-height: 1.6; }
+
+  .panel-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid var(--line);
+  }
+  .panel-row .nm { flex: 1; font-size: 18px; font-weight: 500; }
+
+  .contact-list { max-height: 30vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; margin-top: 8px; }
+  .contact { display: flex; flex-direction: column; padding: 12px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .contact:last-child { border-bottom: none; }
+  .contact.sel { background: var(--blue-bg); }
+  .contact .n { font-size: 18px; font-weight: 500; }
+  .contact .e { font-size: 14px; color: var(--sub); }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(120px);
+    background: var(--ink); color: var(--panel); border-radius: 10px;
+    padding: 14px 20px; font-size: 17px; display: flex; gap: 18px; align-items: center;
+    transition: transform .25s ease; z-index: 20; white-space: nowrap;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #toast button { border: none; background: none; color: #7fb4e8; font-size: 17px; font-weight: 600; cursor: pointer; padding: 4px; }
+</style>
+</head>
+<body data-theme="light">
+
+<header>
+  <h1>マイタスク</h1>
+  <div class="head-right">
+    <span id="updated">読み込み中…</span>
+    <button class="head-btn" onclick="openQrSheet()" aria-label="スマホで管理">📱</button>
+    <button class="head-btn" onclick="openSettingsSheet()" aria-label="設定">⚙</button>
+    <button class="head-btn" id="btn-refresh" onclick="refresh()" aria-label="今すぐ更新">⟳</button>
+  </div>
+</header>
+<div id="err-bar"></div>
+
+<div id="wrap" class="landscape">
+  <aside class="side-panel" id="panel-clock">
+    <svg id="analog" viewBox="0 0 200 200" role="img" aria-label="アナログ時計">
+      <circle class="face" cx="100" cy="100" r="96"/>
+      <g id="m-ticks"></g>
+      <g id="m-dots"></g>
+      <g id="m-nums"></g>
+      <line id="hand-h" class="h-h" x1="100" y1="100" x2="100" y2="52"/>
+      <line id="hand-m" class="h-m" x1="100" y1="100" x2="100" y2="30"/>
+      <line id="hand-s" class="h-s" x1="100" y1="106" x2="100" y2="24"/>
+      <circle class="pin" cx="100" cy="100" r="4"/>
+    </svg>
+    <div id="digi-wrap">
+      <div id="digital">00:00:00</div>
+      <div id="digital-date"></div>
+    </div>
+  </aside>
+
+  <main id="panel-tasks">
+    <section class="col col-today">
+      <div class="col-head" id="head-today">今日 (0)</div>
+      <div class="list" id="list-today"></div>
+    </section>
+    <section class="col col-week">
+      <div class="col-head" id="head-week">今週中 (0)</div>
+      <div class="list" id="list-week"></div>
+    </section>
+    <section class="col col-over">
+      <div class="col-head" id="head-over">期限切れ (0)</div>
+      <div class="list" id="list-over"></div>
+    </section>
+  </main>
+
+  <aside class="side-panel" id="panel-cal">
+    <div class="cal-head" id="cal-head">今日の予定 (0)</div>
+    <div class="cal-list" id="cal-list"></div>
+  </aside>
+</div>
+
+<div id="overlay" onclick="closeSheet()"></div>
+<div id="sheet">
+  <div class="sheet-head">
+    <div class="t" id="sheet-title"></div>
+    <div class="s" id="sheet-sub"></div>
+  </div>
+  <div class="sheet-body" id="sheet-body"></div>
+</div>
+
+<div id="toast"><span id="toast-msg"></span><button id="toast-undo">元に戻す</button></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+var REFRESH_MS = 5 * 60 * 1000;
+var RETRY_MS = 60 * 1000;
+var ANALOG_MIN = 340;   /* パネルがこのpx以上=「広い」 */
+var PANEL_MIN = 150;
+var DARK_FROM = 18, DARK_TO = 6; /* 自動テーマ: 18時〜6時はダーク */
+var TASKS_URL = 'https://tasks.google.com';
+var PANEL_NAMES = { clock: '時計', tasks: 'ToDo', cal: '予定' };
+
+var state = {
+  data: null, current: null, contacts: null,
+  toastTimer: null, retryTimer: null, saveTimer: null,
+  assignTemplate: 'std', assignSel: null,
+  settings: {
+    order: ['clock', 'tasks', 'cal'],
+    show: { clock: true, tasks: true, cal: true },
+    clockSizeL: 300, clockSizeP: 220,
+    calSizeL: 300, calSizeP: 220,
+    clockNarrow: { analog: false, digital: true },
+    clockWide:   { analog: true,  digital: true },
+    analogStyle: 1, digitalStyle: 1,
+    taskSort: 'due',
+    theme: 'light'
+  }
+};
+
+/* ================= データ取得 ================= */
+
+function refresh() {
+  setLoading(true);
+  google.script.run
+    .withSuccessHandler(function (res) {
+      setLoading(false);
+      hideError();
+      if (res && res.settings) state.settings = res.settings;
+      state.data = res;
+      render();
+      applyLayout();
+    })
+    .withFailureHandler(function (err) {
+      setLoading(false);
+      showError(err);
+      clearTimeout(state.retryTimer);
+      state.retryTimer = setTimeout(refresh, RETRY_MS);
+    })
+    .getSignageData();
+}
+
+function showError(err) {
+  var raw = (err && err.message) ? err.message : '';
+  var msg, fix;
+  if (!navigator.onLine) {
+    msg = 'ネットワークに接続できません';
+    fix = 'LANケーブルまたはWi-Fiの接続を確認してください';
+  } else if (/auth|login|permission|denied|401|403|ログイン|承認/i.test(raw)) {
+    msg = '認証エラーが発生しました';
+    fix = '画面を再読み込みしてください。直らない場合はGoogleアカウントに再ログインしてください';
+  } else {
+    msg = '更新に失敗しました' + (raw ? '（' + raw + '）' : '');
+    fix = 'しばらく待っても解消しない場合はPCを再起動してください';
+  }
+  var bar = document.getElementById('err-bar');
+  bar.textContent = '⚠ ' + msg + ' — ' + fix + '（1分後に自動再試行します）';
+  bar.style.display = 'block';
+  if (state.data) {
+    document.getElementById('updated').textContent =
+      '⚠ 最終更新 ' + state.data.updatedAt + '（更新失敗中）';
+  }
+}
+
+function hideError() {
+  document.getElementById('err-bar').style.display = 'none';
+  clearTimeout(state.retryTimer);
+}
+
+function setLoading(on) {
+  document.getElementById('btn-refresh').classList.toggle('spinning', on);
+}
+
+function call(fn, args, after) {
+  setLoading(true);
+  var runner = google.script.run
+    .withSuccessHandler(function (res) {
+      setLoading(false);
+      if (res && res.groups) {
+        if (res.settings) state.settings = res.settings;
+        state.data = res; render();
+      }
+      if (after) after(res);
+    })
+    .withFailureHandler(function (err) {
+      setLoading(false);
+      showToast('エラー: ' + (err && err.message ? err.message : '操作に失敗しました'), false);
+    });
+  runner[fn].apply(runner, args);
+}
+
+/* ================= 描画 ================= */
+
+function render() {
+  var g = state.data.groups;
+  document.getElementById('updated').textContent = '最終更新 ' + state.data.updatedAt;
+  renderCol('today', g.today, g.doneToday);
+  renderCol('week', g.week, []);
+  renderCol('over', g.overdue, []);
+  renderCal(state.data.events || []);
+}
+
+function renderCol(key, items, doneItems) {
+  var head = { today: '今日', week: '今週中', over: '期限切れ' }[key];
+  document.getElementById('head-' + key).textContent = head + ' (' + items.length + ')';
+  var box = document.getElementById('list-' + key);
+  box.innerHTML = '';
+  if (!items.length && !doneItems.length) {
+    box.innerHTML = '<div class="empty">タスクはありません</div>';
+    return;
+  }
+  sortItems(items, key).forEach(function (t) { box.appendChild(rowEl(t, false)); });
+  doneItems.forEach(function (t) { box.appendChild(rowEl(t, true)); });
+}
+
+function sortItems(items, colKey) {
+  var mode = state.settings.taskSort || 'due';
+  var arr = items.slice();
+  if (mode === 'title') {
+    arr.sort(function (a, b) { return a.title.localeCompare(b.title, 'ja'); });
+  } else if (mode === 'gtasks') {
+    arr.sort(function (a, b) {
+      if (a.listId !== b.listId) return a.listTitle.localeCompare(b.listTitle, 'ja');
+      return a.position.localeCompare(b.position);
+    });
+  } else { // due: 期限順（今日列の期限なしは末尾）
+    arr.sort(function (a, b) {
+      var ka = (a.due || '9999') + a.position;
+      var kb = (b.due || '9999') + b.position;
+      return ka.localeCompare(kb);
+    });
+  }
+  return arr;
+}
+
+function renderCal(events) {
+  document.getElementById('cal-head').textContent = '今日の予定 (' + events.length + ')';
+  var box = document.getElementById('cal-list');
+  box.innerHTML = '';
+  if (!events.length) {
+    box.innerHTML = '<div class="empty">予定はありません</div>';
+    return;
+  }
+  events.forEach(function (ev) {
+    var el = document.createElement('div');
+    el.className = 'ev';
+    var time = document.createElement('div');
+    time.className = 'ev-time';
+    time.textContent = ev.allDay ? '終日' : (ev.start + ' – ' + ev.end);
+    el.appendChild(time);
+    var title = document.createElement('div');
+    title.className = 'ev-title';
+    title.textContent = ev.title;
+    el.appendChild(title);
+    if (ev.location) {
+      var loc = document.createElement('div');
+      loc.className = 'ev-loc';
+      loc.textContent = '📍 ' + ev.location;
+      el.appendChild(loc);
+    }
+    box.appendChild(el);
+  });
+}
+
+function rowEl(t, done) {
+  var row = document.createElement('div');
+  row.className = 'row' + (done ? ' done' : '');
+
+  var chk = document.createElement('button');
+  chk.className = 'chk';
+  chk.textContent = done ? '✓' : '○';
+  chk.setAttribute('aria-label', done ? '完了を取り消す' : '完了にする');
+  row.appendChild(chk);
+
+  var main = document.createElement('div');
+  main.className = 'row-main';
+  var title = document.createElement('div');
+  title.className = 'row-title';
+  title.textContent = t.title + (t.space ? '（' + t.space + '）' : '');
+  main.appendChild(title);
+  var due = document.createElement('div');
+  due.className = 'row-due' + (!done && t.overdueDays > 0 ? ' over' : '');
+  due.textContent = done ? '完了'
+    : (t.dueLabel + (t.overdueDays > 0 ? '（' + t.overdueDays + '日超過）' : ''));
+  main.appendChild(due);
+  row.appendChild(main);
+
+  chk.onclick = function () {
+    if (done) { reopen(t); return; }
+    // サーバー応答を待たず、その場で完了表示にする
+    row.classList.add('done');
+    chk.textContent = '✓';
+    due.textContent = '完了';
+    due.className = 'row-due';
+    complete(t);
+  };
+
+  if (!done) {
+    var kebab = document.createElement('button');
+    kebab.className = 'kebab';
+    kebab.textContent = '⋮';
+    kebab.setAttribute('aria-label', 'その他の操作');
+    kebab.onclick = function () { openTaskSheet(t); };
+    row.appendChild(kebab);
+  }
+  return row;
+}
+
+/* ================= 完了 / 取り消し ================= */
+
+function complete(t) {
+  call('completeTask', [t.listId, t.id]);
+  showToast('「' + trunc(t.title) + '」を完了しました', true, function () {
+    call('reopenTask', [t.listId, t.id]);
+  });
+}
+function reopen(t) { call('reopenTask', [t.listId, t.id]); }
+
+/* ================= レイアウト（3パネル・スプリッタ・向き） ================= */
+
+function isPortrait() { return window.innerHeight > window.innerWidth; }
+
+function panelEl(key) {
+  return document.getElementById(
+    { clock: 'panel-clock', tasks: 'panel-tasks', cal: 'panel-cal' }[key]);
+}
+function sizeKey(key) {
+  return key === 'clock' ? (isPortrait() ? 'clockSizeP' : 'clockSizeL')
+                         : (isPortrait() ? 'calSizeP' : 'calSizeL');
+}
+
+function applyLayout() {
+  var s = state.settings;
+  var wrap = document.getElementById('wrap');
+  var portrait = isPortrait();
+  wrap.className = portrait ? 'portrait' : 'landscape';
+  wrap.style.flexDirection = portrait ? 'column' : 'row';
+
+  wrap.querySelectorAll('.splitter').forEach(function (sp) { sp.remove(); });
+  ['clock', 'tasks', 'cal'].forEach(function (k) {
+    var el = panelEl(k);
+    el.style.display = 'none';
+    wrap.appendChild(el);
+  });
+
+  var visible = s.order.filter(function (k) { return s.show[k]; });
+  var frag = document.createDocumentFragment();
+  visible.forEach(function (k) { frag.appendChild(panelEl(k)); });
+  wrap.appendChild(frag);
+
+  visible.forEach(function (k, i) {
+    var el = panelEl(k);
+    el.style.display = (k === 'tasks') ? 'grid' : 'flex';
+    if (k === 'tasks') return;
+    var sp = document.createElement('div');
+    sp.className = 'splitter';
+    var after = i < visible.length - 1; // 最後尾のパネルは手前側にバー
+    sp.dataset.panel = k;
+    sp.dataset.sign = after ? '1' : '-1';
+    if (after) el.after(sp); else el.before(sp);
+    attachDrag(sp);
+  });
+
+  applySizes();
+  updateClockScale();
+  applyTheme();
+}
+
+function applySizes() {
+  var s = state.settings;
+  var portrait = isPortrait();
+  ['clock', 'cal'].forEach(function (k) {
+    var el = panelEl(k);
+    var size = s[sizeKey(k)];
+    if (portrait) { el.style.width = ''; el.style.height = size + 'px'; }
+    else { el.style.height = ''; el.style.width = size + 'px'; }
+  });
+}
+
+function attachDrag(sp) {
+  var start = null;
+  sp.addEventListener('pointerdown', function (e) {
+    var key = sp.dataset.panel;
+    start = {
+      pos: isPortrait() ? e.clientY : e.clientX,
+      size: state.settings[sizeKey(key)],
+      key: key, sign: Number(sp.dataset.sign)
+    };
+    sp.setPointerCapture(e.pointerId);
+  });
+  sp.addEventListener('pointermove', function (e) {
+    if (!start) return;
+    var now = isPortrait() ? e.clientY : e.clientX;
+    var wrapLen = isPortrait()
+      ? document.getElementById('wrap').clientHeight
+      : document.getElementById('wrap').clientWidth;
+    var size = start.size + (now - start.pos) * start.sign;
+    size = Math.round(Math.max(PANEL_MIN, Math.min(wrapLen * 0.6, size)));
+    state.settings[sizeKey(start.key)] = size;
+    applySizes();
+    updateClockScale();
+  });
+  sp.addEventListener('pointerup', function () {
+    if (!start) return;
+    start = null;
+    saveSettings();
+  });
+}
+
+function saveSettings() {
+  clearTimeout(state.saveTimer);
+  state.saveTimer = setTimeout(function () {
+    google.script.run.saveSettings(state.settings);
+  }, 600);
+}
+
+/* ================= テーマ ================= */
+
+function applyTheme() {
+  var t = state.settings.theme;
+  var mode = t;
+  if (t === 'auto') {
+    var h = new Date().getHours();
+    mode = (h >= DARK_FROM || h < DARK_TO) ? 'dark' : 'light';
+  }
+  document.body.dataset.theme = mode;
+}
+
+/* ================= 時計 ================= */
+
+(function initMarks() {
+  var ticks = '', dots = '', nums = '';
+  for (var i = 0; i < 12; i++) {
+    var a = i * 30 * Math.PI / 180;
+    var maj = i % 3 === 0;
+    var r1 = maj ? 82 : 88, r2 = 94;
+    ticks += '<line' + (maj ? ' class="maj"' : '') +
+      ' x1="' + (100 + r1 * Math.sin(a)).toFixed(1) + '" y1="' + (100 - r1 * Math.cos(a)).toFixed(1) +
+      '" x2="' + (100 + r2 * Math.sin(a)).toFixed(1) + '" y2="' + (100 - r2 * Math.cos(a)).toFixed(1) + '"/>';
+    if (maj) {
+      dots += '<circle cx="' + (100 + 88 * Math.sin(a)).toFixed(1) +
+        '" cy="' + (100 - 88 * Math.cos(a)).toFixed(1) + '" r="4"/>';
+      nums += '<text x="' + (100 + 74 * Math.sin(a)).toFixed(1) +
+        '" y="' + (100 - 74 * Math.cos(a)).toFixed(1) + '">' + (i === 0 ? 12 : i) + '</text>';
+    }
+  }
+  document.getElementById('m-ticks').innerHTML = ticks;
+  document.getElementById('m-dots').innerHTML = dots;
+  document.getElementById('m-nums').innerHTML = nums;
+})();
+
+function updateClockScale() {
+  var s = state.settings;
+  var panel = document.getElementById('panel-clock');
+  var size = s[sizeKey('clock')];
+  var wide = size >= ANALOG_MIN;
+  var cfg = wide ? (s.clockWide || {}) : (s.clockNarrow || {});
+
+  panel.dataset.astyle = s.analogStyle || 1;
+  panel.dataset.dstyle = s.digitalStyle || 1;
+
+  var analog = document.getElementById('analog');
+  var digital = document.getElementById('digital');
+  var ddate = document.getElementById('digital-date');
+
+  var portrait = isPortrait();
+  digital.style.display = cfg.digital ? 'block' : 'none';
+  ddate.style.display = cfg.digital ? 'block' : 'none';
+  var fontBase = portrait ? size / 5 : size / 7; // 縦画面はパネル高さ基準
+  digital.style.fontSize = Math.max(22, Math.min(56, Math.round(fontBase))) + 'px';
+  ddate.style.fontSize = Math.max(14, Math.min(22, Math.round(fontBase / 2.6))) + 'px';
+
+  analog.style.display = cfg.analog ? 'block' : 'none';
+  if (cfg.analog) {
+    var analogSize;
+    if (portrait) {
+      // 横並び: パネルの高さに収める
+      analogSize = Math.max(90, Math.min(size - 36, window.innerWidth * 0.4));
+    } else {
+      // 縦並び: パネルの幅に収める
+      var room = cfg.digital ? size - 140 : size - 40;
+      analogSize = Math.max(100, Math.min(room, window.innerHeight * 0.6));
+    }
+    analog.style.width = analogSize + 'px';
+    analog.style.height = analogSize + 'px';
+  }
+}
+
+var lastMinute = -1;
+function tickClock() {
+  var now = new Date();
+  var h = now.getHours(), m = now.getMinutes(), sec = now.getSeconds();
+  rotate('hand-h', (h % 12) * 30 + m * 0.5);
+  rotate('hand-m', m * 6 + sec * 0.1);
+  rotate('hand-s', sec * 6);
+  document.getElementById('digital').textContent = pad(h) + ':' + pad(m) + ':' + pad(sec);
+  var youbi = ['日', '月', '火', '水', '木', '金', '土'][now.getDay()];
+  document.getElementById('digital-date').textContent =
+    now.getFullYear() + '年' + (now.getMonth() + 1) + '月' + now.getDate() + '日（' + youbi + '）';
+  if (m !== lastMinute) { lastMinute = m; applyTheme(); }
+}
+function rotate(id, deg) {
+  document.getElementById(id).setAttribute('transform', 'rotate(' + deg + ' 100 100)');
+}
+setInterval(tickClock, 1000);
+
+/* ================= ボトムシート共通 ================= */
+
+function openSheetRaw(title, sub) {
+  document.getElementById('sheet-title').textContent = title;
+  document.getElementById('sheet-sub').textContent = sub || '';
+  document.getElementById('overlay').classList.add('show');
+  document.getElementById('sheet').classList.add('show');
+}
+function closeSheet() {
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('sheet').classList.remove('show');
+}
+function body(html) { document.getElementById('sheet-body').innerHTML = html; }
+
+/* ---- タスク操作シート ---- */
+function openTaskSheet(t) {
+  state.current = t;
+  openSheetRaw(t.title, (t.dueLabel || '期限なし') + ' ・ ' + t.listTitle);
+  showMenu();
+}
+
+function showMenu() {
+  var html =
+    mi('snooze', '⏭', '明日に延期') +
+    mi('due', '📅', '期限を変更') +
+    mi('assign', '✉', '依頼メールを送る') +
+    mi('qr', '📱', 'スマホで編集') +
+    mi('notes', '📝', '詳細を表示');
+  if (!state.current.assigned) {
+    html += mi('del', '🗑', '削除', true);
+  }
+  body(html);
+}
+function mi(act, ic, label, danger) {
+  return '<button class="menu-item' + (danger ? ' danger' : '') +
+    '" onclick="menuAction(\'' + act + '\')">' +
+    '<span class="ic">' + ic + '</span>' + label + '</button>';
+}
+
+function menuAction(act) {
+  var t = state.current;
+  if (act === 'snooze') {
+    closeSheet();
+    call('snoozeToTomorrow', [t.listId, t.id], function () {
+      showToast('「' + trunc(t.title) + '」を明日に延期しました', false);
+    });
+  } else if (act === 'due') {
+    body('<div class="panel"><label>新しい期限</label>' +
+      '<input type="date" id="due-input" value="' + (t.due || todayStr()) + '">' +
+      '<div class="btn-row footer">' +
+      '<button class="btn" onclick="showMenu()">戻る</button>' +
+      '<button class="btn primary" onclick="applyDue()">変更する</button></div></div>');
+  } else if (act === 'assign') {
+    showAssign();
+  } else if (act === 'qr') {
+    body('<div class="panel"><div class="qr-wrap"><div class="qr-inner" id="qr-box"></div>' +
+      '<div class="qr-hint">スマホのカメラで読み取ると、このタスクを<br>Google Tasksで直接開けます（要Googleログイン）</div></div>' +
+      '<div class="btn-row footer"><button class="btn" onclick="showMenu()">戻る</button></div></div>');
+    makeQr('qr-box', t.webViewLink || TASKS_URL);
+  } else if (act === 'notes') {
+    body('<div class="panel"><div class="notes-view">' +
+      esc(t.notes || '詳細メモはありません') + '</div>' +
+      '<div class="btn-row footer"><button class="btn" onclick="showMenu()">戻る</button></div></div>');
+  } else if (act === 'del') {
+    body('<div class="panel"><div class="notes-view">このタスクを削除しますか？<br>この操作は取り消せません。</div>' +
+      '<div class="btn-row footer">' +
+      '<button class="btn" onclick="showMenu()">戻る</button>' +
+      '<button class="btn danger" onclick="applyDelete()">削除する</button></div></div>');
+  }
+}
+
+function applyDue() {
+  var v = document.getElementById('due-input').value;
+  if (!v) return;
+  var t = state.current;
+  closeSheet();
+  call('changeDue', [t.listId, t.id, v], function () {
+    showToast('期限を変更しました', false);
+  });
+}
+
+function applyDelete() {
+  var t = state.current;
+  closeSheet();
+  call('deleteTask', [t.listId, t.id], function () {
+    showToast('「' + trunc(t.title) + '」を削除しました', false);
+  });
+}
+
+/* ---- スマホで管理（全体QR） ---- */
+function openQrSheet() {
+  openSheetRaw('スマホでタスクを管理', 'タスクの追加・編集はGoogle Tasksで');
+  body('<div class="panel"><div class="qr-wrap"><div class="qr-inner" id="qr-box"></div>' +
+    '<div class="qr-hint">スマホのカメラで読み取るとGoogle Tasksが開きます。<br>' +
+    'あなたのGoogleアカウントでのログインが必要なため、<br>第三者のスマホからは操作できません。</div></div></div>');
+  makeQr('qr-box', TASKS_URL);
+}
+
+function makeQr(elId, text) {
+  var el = document.getElementById(elId);
+  el.innerHTML = '';
+  if (typeof QRCode === 'undefined') {
+    el.innerHTML = '<div class="qr-hint">QRライブラリを読み込めませんでした。<br>ネットワーク接続を確認して再読み込みしてください。</div>';
+    return;
+  }
+  new QRCode(el, {
+    text: text, width: 220, height: 220,
+    colorDark: '#000000', colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+}
+
+/* ---- 設定シート ---- */
+function openSettingsSheet() {
+  var s = state.settings;
+  openSheetRaw('画面設定', 'テーマ・パネル・時計');
+  var html = '<div class="panel">';
+
+  html += '<label>テーマ</label><div class="btn-row" style="margin-top:0">' +
+    themeBtn('light', 'ライト') + themeBtn('dark', 'ダーク') +
+    themeBtn('auto', '自動（' + DARK_FROM + '時〜' + DARK_TO + '時ダーク）') + '</div>';
+
+  html += '<label>パネルの表示と並び順（◀▶で入替）</label>';
+  s.order.forEach(function (k) {
+    html += '<div class="panel-row">' +
+      '<button class="btn mini" onclick="movePanel(\'' + k + '\',-1)">◀</button>' +
+      '<button class="btn mini" onclick="movePanel(\'' + k + '\',1)">▶</button>' +
+      '<span class="nm">' + PANEL_NAMES[k] + '</span>' +
+      '<button class="btn mini' + (s.show[k] ? ' sel' : '') + '" style="min-width:96px"' +
+      ' onclick="togglePanel(\'' + k + '\')">' + (s.show[k] ? '表示中' : '非表示') + '</button>' +
+      '</div>';
+  });
+
+  html += '<label>タスクの並び順</label><div class="btn-row" style="margin-top:0">' +
+    sortBtn('due', '期限順') + sortBtn('gtasks', 'Google Tasksの順') +
+    sortBtn('title', 'タイトル順') + '</div>';
+
+  html += '<label>時計の表示内容 — 狭いとき（' + ANALOG_MIN + 'px未満）</label>' +
+    '<div class="btn-row" style="margin-top:0">' +
+    toggleBtn('clockNarrow', 'analog', 'アナログ') +
+    toggleBtn('clockNarrow', 'digital', 'デジタル') + '</div>';
+  html += '<label>時計の表示内容 — 広いとき（' + ANALOG_MIN + 'px以上）</label>' +
+    '<div class="btn-row" style="margin-top:0">' +
+    toggleBtn('clockWide', 'analog', 'アナログ') +
+    toggleBtn('clockWide', 'digital', 'デジタル') + '</div>';
+
+  html += '<label>アナログのデザイン</label><div class="btn-row" style="margin-top:0">' +
+    styleBtn('analogStyle', 1, 'クラシック') + styleBtn('analogStyle', 2, 'ミニマル') +
+    styleBtn('analogStyle', 3, 'ナンバー') + '</div>';
+  html += '<label>デジタルのデザイン</label><div class="btn-row" style="margin-top:0">' +
+    styleBtn('digitalStyle', 1, 'スタンダード') + styleBtn('digitalStyle', 2, 'LED') +
+    styleBtn('digitalStyle', 3, 'モダン') + '</div>';
+
+  html += '<div class="qr-hint" style="margin-top:16px">時計・予定パネルのサイズは、パネル脇のバーをドラッグして調整できます。<br>' +
+    '現在のサイズ — 時計: ' + s[sizeKey('clock')] + 'px ／ 予定: ' + s[sizeKey('cal')] + 'px</div>';
+  html += '</div>';
+  body(html);
+}
+
+function themeBtn(v, label) {
+  return '<button class="btn' + (state.settings.theme === v ? ' sel' : '') +
+    '" onclick="setTheme(\'' + v + '\')">' + label + '</button>';
+}
+function sortBtn(v, label) {
+  return '<button class="btn' + ((state.settings.taskSort || 'due') === v ? ' sel' : '') +
+    '" onclick="setSort(\'' + v + '\')">' + label + '</button>';
+}
+function setSort(v) {
+  state.settings.taskSort = v;
+  if (state.data) render();
+  saveSettings();
+  openSettingsSheet();
+}
+function styleBtn(key, n, label) {
+  return '<button class="btn' + (state.settings[key] === n ? ' sel' : '') +
+    '" onclick="setStyle(\'' + key + '\',' + n + ')">' + label + '</button>';
+}
+function toggleBtn(group, key, label) {
+  var on = state.settings[group] && state.settings[group][key];
+  return '<button class="btn' + (on ? ' sel' : '') +
+    '" onclick="toggleClockPart(\'' + group + '\',\'' + key + '\')">' +
+    label + '：' + (on ? 'ON' : 'OFF') + '</button>';
+}
+
+function setTheme(v) { state.settings.theme = v; applyTheme(); saveSettings(); openSettingsSheet(); }
+function setStyle(key, n) { state.settings[key] = n; updateClockScale(); saveSettings(); openSettingsSheet(); }
+function toggleClockPart(group, key) {
+  if (!state.settings[group]) state.settings[group] = {};
+  state.settings[group][key] = !state.settings[group][key];
+  updateClockScale();
+  saveSettings();
+  openSettingsSheet();
+}
+function movePanel(key, dir) {
+  var o = state.settings.order;
+  var i = o.indexOf(key);
+  var j = i + dir;
+  if (j < 0 || j >= o.length) return;
+  o[i] = o[j]; o[j] = key;
+  applyLayout();
+  saveSettings();
+  openSettingsSheet();
+}
+function togglePanel(key) {
+  state.settings.show[key] = !state.settings.show[key];
+  applyLayout();
+  saveSettings();
+  openSettingsSheet();
+}
+
+/* ================= 依頼メール（検索＋文面選択） ================= */
+
+function showAssign() {
+  state.assignSel = null;
+  body('<div class="panel">' +
+    '<label>依頼先（名前・アドレスで検索）</label>' +
+    '<input type="text" id="contact-q" placeholder="例: 田中 / tanaka@" oninput="filterContacts()">' +
+    '<div class="contact-list" id="contact-list">' +
+    '<div class="contact"><span class="n">読み込み中…</span></div></div>' +
+    '<label>文面</label><div class="btn-row" style="margin-top:0">' +
+    tmplBtn('std', '標準') + tmplBtn('polite', '丁寧') + tmplBtn('short', '簡潔') + '</div>' +
+    '<label>依頼期限</label>' +
+    '<input type="date" id="assign-due" value="' + (state.current.due || '') + '">' +
+    '<div class="btn-row footer">' +
+    '<button class="btn" onclick="showMenu()">戻る</button>' +
+    '<button class="btn primary" onclick="sendAssign()">送信する</button></div></div>');
+  if (state.contacts) { filterContacts(); return; }
+  google.script.run.withSuccessHandler(function (list) {
+    state.contacts = list || [];
+    filterContacts();
+  }).withFailureHandler(function () {
+    var box = document.getElementById('contact-list');
+    if (box) box.innerHTML = '<div class="contact"><span class="n">連絡先を取得できませんでした。アドレスを直接入力してください</span></div>';
+    state.contacts = [];
+  }).getContacts();
+}
+
+function tmplBtn(v, label) {
+  return '<button class="btn' + (state.assignTemplate === v ? ' sel' : '') +
+    '" id="tmpl-' + v + '" onclick="setTemplate(\'' + v + '\')">' + label + '</button>';
+}
+function setTemplate(v) {
+  state.assignTemplate = v;
+  ['std', 'polite', 'short'].forEach(function (k) {
+    var el = document.getElementById('tmpl-' + k);
+    if (el) el.classList.toggle('sel', k === v);
+  });
+}
+
+function filterContacts() {
+  var box = document.getElementById('contact-list');
+  if (!box || state.contacts === null) return;
+  var q = (document.getElementById('contact-q').value || '').trim().toLowerCase();
+  var list = state.contacts.filter(function (c) {
+    return !q || c.name.toLowerCase().indexOf(q) >= 0 || c.email.toLowerCase().indexOf(q) >= 0;
+  }).slice(0, 50);
+
+  box.innerHTML = '';
+  // 入力がメールアドレス形式で候補に一致がなければ「直接送信」候補を追加
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(q) &&
+      !list.some(function (c) { return c.email.toLowerCase() === q; })) {
+    list.unshift({ name: q + ' に直接送信', email: q, direct: true });
+  }
+  if (!list.length) {
+    box.innerHTML = '<div class="contact"><span class="n">該当なし — アドレスを最後まで入力すると直接送信できます</span></div>';
+    state.assignSel = null;
+    return;
+  }
+  list.forEach(function (c) {
+    var el = document.createElement('div');
+    el.className = 'contact';
+    el.innerHTML = '<span class="n">' + esc(c.name) + '</span><span class="e">' + esc(c.email) + '</span>';
+    if (state.assignSel && state.assignSel.email === c.email) el.classList.add('sel');
+    el.onclick = function () {
+      var prev = box.querySelector('.contact.sel');
+      if (prev) prev.classList.remove('sel');
+      el.classList.add('sel');
+      state.assignSel = { name: c.direct ? c.email : c.name, email: c.email };
+    };
+    box.appendChild(el);
+  });
+}
+
+function sendAssign() {
+  if (!state.assignSel) { showToast('依頼先を選択してください', false); return; }
+  var c = state.assignSel;
+  var t = state.current;
+  var payload = {
+    email: c.email, name: c.name,
+    taskTitle: t.title, taskNotes: t.notes,
+    requestDue: document.getElementById('assign-due').value || null,
+    template: state.assignTemplate
+  };
+  closeSheet();
+  google.script.run.withSuccessHandler(function () {
+    showToast(c.name + ' さんに依頼メールを送信しました', false);
+  }).withFailureHandler(function () {
+    showToast('メール送信に失敗しました', false);
+  }).sendRequestMail(payload);
+}
+
+/* ================= トースト・補助 ================= */
+
+function showToast(msg, undoable, onUndo) {
+  var toast = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  var btn = document.getElementById('toast-undo');
+  btn.style.display = undoable ? 'inline' : 'none';
+  btn.onclick = function () { hideToast(); if (onUndo) onUndo(); };
+  toast.classList.add('show');
+  clearTimeout(state.toastTimer);
+  state.toastTimer = setTimeout(hideToast, 5000);
+}
+function hideToast() { document.getElementById('toast').classList.remove('show'); }
+
+function trunc(s) { return s.length > 12 ? s.slice(0, 12) + '…' : s; }
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, function (ch) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+  });
+}
+function pad(n) { return String(n).padStart(2, '0'); }
+function todayStr() {
+  var d = new Date();
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+window.addEventListener('resize', applyLayout);
+applyLayout();
+tickClock();
+refresh();
+setInterval(refresh, REFRESH_MS);
+</script>
+</body>
+</html>
