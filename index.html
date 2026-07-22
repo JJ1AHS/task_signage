@@ -71,8 +71,9 @@
   #wrap.portrait  .splitter { height: 14px; cursor: row-resize; }
 
   #panel-tasks {
-    flex: 1; display: grid; grid-template-columns: repeat(3, 1fr);
+    flex: 1; display: grid; grid-template-columns: repeat(3, minmax(280px, 1fr));
     gap: 1px; background: var(--line); min-height: 0; min-width: 0;
+    overflow-x: auto; overscroll-behavior-x: contain;
   }
   .col { background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
   .col-head, .cal-head {
@@ -95,10 +96,11 @@
     font-size: 26px; color: var(--sub); cursor: pointer; border-radius: 50%;
   }
   .chk:active, .kebab:active { background: var(--press); }
-  .row-main { flex: 1; min-width: 0; }
+  .row-main { flex: 1; min-width: 0; cursor: pointer; }
   .row-title {
     font-size: 20px; font-weight: 500; line-height: 1.35; color: var(--ink);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; word-break: break-word;
   }
   .row-due { font-size: 15px; color: var(--sub); margin-top: 2px; }
   .row-due.over { color: var(--red); font-weight: 600; }
@@ -487,6 +489,7 @@ function rowEl(t, done) {
   due.textContent = done ? '完了'
     : (t.dueLabel + (t.overdueDays > 0 ? '（' + t.overdueDays + '日超過）' : ''));
   main.appendChild(due);
+  main.onclick = function () { openNotesSheet(t); };
   row.appendChild(main);
 
   chk.onclick = function () {
@@ -722,6 +725,14 @@ function closeSheet() {
 }
 function body(html) { document.getElementById('sheet-body').innerHTML = html; }
 
+/* ---- タスク名タップ: 詳細メモ表示のみ ---- */
+function openNotesSheet(t) {
+  openSheetRaw(t.title, (t.dueLabel || '期限なし') + ' ・ ' + t.listTitle);
+  body('<div class="panel"><div class="notes-view">' +
+    esc(t.notes || '詳細メモはありません') + '</div>' +
+    '<div class="btn-row footer"><button class="btn" onclick="closeSheet()">閉じる</button></div></div>');
+}
+
 /* ---- タスク操作シート ---- */
 function openTaskSheet(t) {
   state.current = t;
@@ -925,6 +936,7 @@ function showAssign() {
   body('<div class="panel">' +
     '<label>依頼先（名前・アドレスで検索）</label>' +
     '<input type="text" id="contact-q" placeholder="例: 田中 / tanaka@" oninput="filterContacts()">' +
+    '<div id="assign-sel" style="font-size:15px; color: var(--green); font-weight:600; margin-top:6px;"></div>' +
     '<div class="contact-list" id="contact-list">' +
     '<div class="contact"><span class="n">読み込み中…</span></div></div>' +
     '<label>文面</label><div class="btn-row" style="margin-top:0">' +
@@ -960,7 +972,17 @@ function setTemplate(v) {
 function filterContacts() {
   var box = document.getElementById('contact-list');
   if (!box || state.contacts === null) return;
-  var q = (document.getElementById('contact-q').value || '').trim().toLowerCase();
+  box.style.display = '';
+  var qEl = document.getElementById('contact-q');
+  var selEl = document.getElementById('assign-sel');
+  var q = (qEl.value || '').trim().toLowerCase();
+
+  // 選択後に入力を書き換えたら選択を解除
+  if (state.assignSel && q !== state.assignSel.email.toLowerCase()) {
+    state.assignSel = null;
+    if (selEl) selEl.textContent = '';
+  }
+
   var list = state.contacts.filter(function (c) {
     return !q || c.name.toLowerCase().indexOf(q) >= 0 || c.email.toLowerCase().indexOf(q) >= 0;
   }).slice(0, 50);
@@ -973,26 +995,35 @@ function filterContacts() {
   }
   if (!list.length) {
     box.innerHTML = '<div class="contact"><span class="n">該当なし — アドレスを最後まで入力すると直接送信できます</span></div>';
-    state.assignSel = null;
     return;
   }
   list.forEach(function (c) {
     var el = document.createElement('div');
     el.className = 'contact';
     el.innerHTML = '<span class="n">' + esc(c.name) + '</span><span class="e">' + esc(c.email) + '</span>';
-    if (state.assignSel && state.assignSel.email === c.email) el.classList.add('sel');
     el.onclick = function () {
-      var prev = box.querySelector('.contact.sel');
-      if (prev) prev.classList.remove('sel');
-      el.classList.add('sel');
+      // タップした候補を入力欄に自動入力し、リストを閉じる
       state.assignSel = { name: c.direct ? c.email : c.name, email: c.email };
+      qEl.value = c.email;
+      box.style.display = 'none';
+      if (selEl) selEl.textContent = '✓ 送信先: ' + state.assignSel.name + '（' + c.email + '）';
     };
     box.appendChild(el);
   });
 }
 
 function sendAssign() {
-  if (!state.assignSel) { showToast('依頼先を選択してください', false); return; }
+  if (!state.assignSel) {
+    // 候補未選択でも、入力欄が有効なアドレスならそのまま送信
+    var qEl = document.getElementById('contact-q');
+    var q = qEl ? qEl.value.trim() : '';
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(q)) {
+      state.assignSel = { name: q, email: q };
+    } else {
+      showToast('依頼先を選択してください', false);
+      return;
+    }
+  }
   var c = state.assignSel;
   var t = state.current;
   var payload = {
